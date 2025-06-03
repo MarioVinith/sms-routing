@@ -1,2 +1,5 @@
-# sms-routing
-Service for routing SMS and handling opt-outs
+# SMS-Routing service
+Service for routing SMS and handling opt-outs.
+
+# Implementation
+
