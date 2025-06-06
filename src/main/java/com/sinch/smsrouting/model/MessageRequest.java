@@ -17,4 +17,6 @@ public class MessageRequest {
     @NotBlank(message = "Format is required")
     private String format;
 
+    private Long timeStamp;
+
 }

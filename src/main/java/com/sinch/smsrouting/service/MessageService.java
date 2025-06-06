@@ -8,19 +8,21 @@ import com.sinch.smsrouting.model.Status;
 import com.sinch.smsrouting.repository.CarrierRegistry;
 import com.sinch.smsrouting.repository.MessageRepository;
 import com.sinch.smsrouting.repository.OptOutRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static com.sinch.smsrouting.util.SmsRoutingUtil.*;
 
+@Slf4j
 @Service
 public class MessageService {
 
-    private static final Logger log = LoggerFactory.getLogger(MessageService.class);
     @Autowired
     private MessageRepository messageRepo;
     @Autowired
@@ -28,29 +30,52 @@ public class MessageService {
     @Autowired
     private CarrierRegistry registry;
 
+    @Autowired
+    private ScheduledExecutorService scheduledExecutor;
+
     public Message sendMessage(MessageRequest request) throws Exception {
         Message message = new Message();
+
         processInvalidNumber(request.getDestinationNumber());
         processOptedOutScenario(request.getDestinationNumber());
+
+        long s = System.currentTimeMillis() / 1000;
 
         message.setId(UUID.randomUUID().toString());
         message.setDestinationNumber(request.getDestinationNumber());
         message.setContent(request.getContent());
         message.setFormat(request.getFormat());
-        message.setStatus(Status.SENT);
+
         message.setCarrier(registry.fetchCarrier(request.getDestinationNumber()));
+
+        if (request.getTimeStamp() != null) {
+            message.setStatus(Status.PENDING);
+
+            scheduledExecutor.schedule(() -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {}
+
+                log.info("Message delivered to the Customer - {}", request.getDestinationNumber());
+                message.setStatus(Status.DELIVERED);
+                messageRepo.save(message);
+            }, s - request.getTimeStamp(), TimeUnit.SECONDS);
+
+            scheduledExecutor.shutdown();
+        } else {
+            message.setStatus(Status.SENT);
+            new Thread(() -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {}
+
+                log.info("Message delivered to the Customer - {}", request.getDestinationNumber());
+                message.setStatus(Status.DELIVERED);
+                messageRepo.save(message);
+            }).start();
+        }
+
         log.info("Message triggered to the Carrier - {} for {}", message.getCarrier(), request.getDestinationNumber());
-
-        new Thread(() -> {
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {}
-
-            log.info("Message delivered to the Customer - {}", request.getDestinationNumber());
-            message.setStatus(Status.DELIVERED);
-            messageRepo.save(message);
-        }).start();
-
         messageRepo.save(message);
 
         return new Message(message.getId(), message.getStatus());
