@@ -60,8 +60,6 @@ public class MessageService {
                 message.setStatus(Status.DELIVERED);
                 messageRepo.save(message);
             }, s - request.getTimeStamp(), TimeUnit.SECONDS);
-
-            scheduledExecutor.shutdown();
         } else {
             message.setStatus(Status.SENT);
             new Thread(() -> {
